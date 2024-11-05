@@ -85,6 +85,7 @@ public:
 	 * @param setpoint_vel current velocity setpoint as information to be able to stop in time, does not get changed
 	 */
 	void modifySetpoint(Vector2f &setpoint_accel, const Vector2f &setpoint_vel);
+
 protected:
 
 	obstacle_distance_s _obstacle_map_body_frame {};
@@ -116,7 +117,7 @@ protected:
 
 	/**
 	 * Constrain the acceleration setpoint based on the distance to the obstacle
-	 *  The Scaling of the acceleration setpoint is linear below the min_dist_to_keep and quadratic until the scale_distance above
+	 * The Scaling of the acceleration setpoint is linear below the min_dist_to_keep and quadratic until the scale_distance above
 	 *           +1          ________ _ _
 	 * ┌─┐      │           //
 	 * │X│      │          //

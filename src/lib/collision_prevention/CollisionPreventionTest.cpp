@@ -617,6 +617,34 @@ TEST_F(CollisionPreventionTest, jerkLimit)
 	EXPECT_GT(modified_setpoint_limited_jerk.norm(), modified_setpoint_default_jerk.norm());
 
 }
+TEST_F(CollisionPreventionTest, addOutOfRangeDistanceSensorData)
+{
+	// GIVEN: a vehicle attitude and a distance sensor message
+	TestCollisionPrevention cp;
+	cp.getObstacleMap().increment = 10.f;
+	matrix::Quaternion<float> vehicle_attitude(1, 0, 0, 0); //unit transform
+	distance_sensor_s distance_sensor {};
+	distance_sensor.min_distance = 0.2f;
+	distance_sensor.max_distance = 20.f;
+	distance_sensor.orientation = distance_sensor_s::ROTATION_FORWARD_FACING;
+	// Distance is out of Range
+	distance_sensor.current_distance = -1.f;
+	distance_sensor.signal_quality = 0;
+
+	uint32_t distances_array_size = sizeof(cp.getObstacleMap().distances) / sizeof(cp.getObstacleMap().distances[0]);
+
+	cp.test_addDistanceSensorData(distance_sensor, vehicle_attitude);
+
+	//THEN: the correct bins in the map should be filled
+	for (uint32_t i = 0; i < distances_array_size; i++) {
+		if (i == 0) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], distance_sensor.max_distance * 100.f);
+
+		} else {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+		}
+	}
+}
 
 TEST_F(CollisionPreventionTest, addDistanceSensorData)
 {

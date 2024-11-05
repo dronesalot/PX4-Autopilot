@@ -310,6 +310,11 @@ CollisionPrevention::_addDistanceSensorData(distance_sensor_s &distance_sensor, 
 	// clamp at maximum sensor range
 	float distance_reading = math::min(distance_sensor.current_distance, distance_sensor.max_distance);
 
+	// negative values indicate out of range but valid measurements.
+	if (fabsf(distance_sensor.current_distance - -1.f) < FLT_EPSILON && distance_sensor.signal_quality == 0) {
+		distance_reading = distance_sensor.max_distance;
+	}
+
 	// discard values below min range
 	if ((distance_reading > distance_sensor.min_distance)) {
 

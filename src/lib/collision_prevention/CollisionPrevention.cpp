@@ -457,7 +457,7 @@ CollisionPrevention::_calculateConstrainedSetpoint(Vector2f &setpoint_accel, con
 	const float vehicle_yaw_angle_rad = Eulerf(attitude).psi();
 
 	const float setpoint_length = setpoint_accel.norm();
-	const float min_dist_to_keep = math::max(_obstacle_map_body_frame.min_distance / 100.0f, _param_cp_dist.get());
+	_min_dist_to_keep = math::max(_obstacle_map_body_frame.min_distance / 100.0f, _param_cp_dist.get());
 
 	const hrt_abstime now = getTime();
 
@@ -471,11 +471,11 @@ CollisionPrevention::_calculateConstrainedSetpoint(Vector2f &setpoint_accel, con
 
 		_transformSetpoint(setpoint_accel);
 
-		_getVelocityCompensationAcceleration(vehicle_yaw_angle_rad, setpoint_vel, now, min_dist_to_keep,
+		_getVelocityCompensationAcceleration(vehicle_yaw_angle_rad, setpoint_vel, now,
 						     vel_comp_accel, vel_comp_accel_dir);
 
 		if (_checkSetpointDirectionFeasability()) {
-			constr_accel_setpoint = _constrainAccelerationSetpoint(min_dist_to_keep, setpoint_length);
+			constr_accel_setpoint = _constrainAccelerationSetpoint(setpoint_length);
 		}
 
 		setpoint_accel = constr_accel_setpoint + vel_comp_accel * vel_comp_accel_dir;
@@ -499,23 +499,36 @@ CollisionPrevention::_calculateConstrainedSetpoint(Vector2f &setpoint_accel, con
 	}
 }
 
+float
+CollisionPrevention::_getObstacleDistance(const Vector2f &direction)
+{
+	const float vehicle_yaw_angle_rad = Eulerf(Quatf(_sub_vehicle_attitude.get().q)).psi();
+	Vector2f dir = direction / direction.norm();
+	const float sp_angle_body_frame = atan2f(dir(1), dir(0)) - vehicle_yaw_angle_rad;
+	const float sp_angle_with_offset_deg = wrap_360(math::degrees(sp_angle_body_frame) -
+					       _obstacle_map_body_frame.angle_offset);
+	int dir_index = floor(sp_angle_with_offset_deg / INTERNAL_MAP_INCREMENT_DEG);
+
+	return _obstacle_map_body_frame.distances[dir_index] * 0.01f;
+}
+
 Vector2f
-CollisionPrevention::_constrainAccelerationSetpoint(const float &min_dist_to_keep, const float &setpoint_length)
+CollisionPrevention::_constrainAccelerationSetpoint(const float &setpoint_length)
 {
 	Vector2f new_setpoint{};
 	const Vector2f normal_component = _closest_dist_dir * (_setpoint_dir.dot(_closest_dist_dir));
 	const Vector2f tangential_component = _setpoint_dir - normal_component;
 
-	float scale = (_closest_dist - min_dist_to_keep);
-	const float scale_distance = math::max(min_dist_to_keep, _param_mpc_vel_manual.get() / _param_mpc_xy_p.get());
+	const float normal_scale = _getScale(_closest_dist);
 
-	// if scale is positive, square it and scale it with the scale_distance
-	scale = scale > 0 ? powf(scale / scale_distance, 2) : scale;
-	scale = math::min(scale, 1.0f);
+
+	const float closest_dist_tangential = _getObstacleDistance(tangential_component);
+	const float tangential_scale = _getScale(closest_dist_tangential);
+
 
 	// only scale accelerations towards the obstacle
 	if (_closest_dist_dir.dot(_setpoint_dir) > 0) {
-		new_setpoint = (tangential_component + normal_component * scale) * setpoint_length;
+		new_setpoint = (tangential_component * tangential_scale + normal_component * normal_scale) * setpoint_length;
 
 	} else {
 		new_setpoint = _setpoint_dir * setpoint_length;
@@ -524,9 +537,21 @@ CollisionPrevention::_constrainAccelerationSetpoint(const float &min_dist_to_kee
 	return new_setpoint;
 }
 
+float
+CollisionPrevention::_getScale(const float &reference_distance)
+{
+	float scale = (reference_distance - _min_dist_to_keep);
+	const float scale_distance = math::max(_min_dist_to_keep, _param_mpc_vel_manual.get() / _param_mpc_xy_p.get());
+
+	// if scale is positive, square it and scale it with the scale_distance
+	scale = scale > 0 ? powf(scale / scale_distance, 2) : scale;
+	scale = math::min(scale, 1.0f);
+	return scale;
+}
+
 void CollisionPrevention::_getVelocityCompensationAcceleration(const float vehicle_yaw_angle_rad,
 		const matrix::Vector2f &setpoint_vel,
-		const hrt_abstime now, const float min_dist_to_keep, float &vel_comp_accel, Vector2f &vel_comp_accel_dir)
+		const hrt_abstime now, float &vel_comp_accel, Vector2f &vel_comp_accel_dir)
 {
 	for (int i = 0; i < INTERNAL_MAP_USED_BINS; i++) {
 		const float max_range = _data_maxranges[i] * 0.01f;
@@ -553,7 +578,7 @@ void CollisionPrevention::_getVelocityCompensationAcceleration(const float vehic
 				delay_distance += curr_vel_parallel * (data_age * 1e-6f);
 			}
 
-			const float stop_distance = math::max(0.f, distance - min_dist_to_keep - delay_distance);
+			const float stop_distance = math::max(0.f, distance - _min_dist_to_keep - delay_distance);
 
 			const float max_vel = math::trajectory::computeMaxSpeedFromDistance(_param_mpc_jerk_max.get(),
 					      _param_mpc_acc_hor.get(), stop_distance, 0.f);

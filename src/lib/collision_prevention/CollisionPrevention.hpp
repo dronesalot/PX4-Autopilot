@@ -134,10 +134,14 @@ protected:
 	 * └─┘/     │
 	 *           -1
 	 */
-	Vector2f _constrainAccelerationSetpoint(const float &min_dist_to_keep, const float &setpoint_length);
+	Vector2f _constrainAccelerationSetpoint(const float &setpoint_length);
 
 	void _getVelocityCompensationAcceleration(const float vehicle_yaw_angle_rad, const matrix::Vector2f &setpoint_vel,
-			const hrt_abstime now, const float min_dist_to_keep, float &vel_comp_accel, Vector2f &vel_comp_accel_dir);
+			const hrt_abstime now, float &vel_comp_accel, Vector2f &vel_comp_accel_dir);
+
+	float _getObstacleDistance(const Vector2f &direction);
+
+	float _getScale(const float &reference_distance);
 
 	/**
 	 * Determines whether a new sensor measurement is used
@@ -163,11 +167,13 @@ private:
 	bool _was_active{false};		/**< states if the collision prevention interferes with the user input */
 	bool _obstacle_data_present{false};	/**< states if obstacle data is present */
 
-	int _setpoint_index{0};			/**< index of the setpoint*/
+	int _setpoint_index{};			/**< index of the setpoint*/
 	Vector2f _setpoint_dir{};		/**< direction of the setpoint*/
 
 	float _closest_dist{};			/**< closest distance to an obstacle  */
 	Vector2f _closest_dist_dir{NAN, NAN};	/**< direction of the closest obstacle  */
+
+	float _min_dist_to_keep{};
 
 	orb_advert_t _mavlink_log_pub{nullptr};	 	/**< Mavlink log uORB handle */
 	Vector2f _DEBUG;

@@ -59,9 +59,9 @@ public:
 	{
 		_addDistanceSensorData(distance_sensor, attitude);
 	}
-	void test_addObstacleSensorData(const obstacle_distance_s &obstacle, const Quatf &attitude)
+	void test_addObstacleSensorData(const obstacle_distance_s &obstacle, const float vehicle_yaw)
 	{
-		_addObstacleSensorData(obstacle, attitude);
+		_addObstacleSensorData(obstacle, vehicle_yaw);
 	}
 	void test_adaptSetpointDirection(Vector2f &setpoint_dir, int &setpoint_index,
 					 float vehicle_yaw_angle_rad)
@@ -733,14 +733,6 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_attitude)
 	obstacle_msg.max_distance = 2000;
 	obstacle_msg.angle_offset = 0.f;
 
-	Quaternion<float> vehicle_attitude1(1, 0, 0, 0); //unit transform
-	Euler<float> attitude2_euler(0, 0, M_PI / 2.0);
-	Quaternion<float> vehicle_attitude2(attitude2_euler); //90 deg yaw
-	Euler<float> attitude3_euler(0, 0, -M_PI / 4.0);
-	Quaternion<float> vehicle_attitude3(attitude3_euler); // -45 deg yaw
-	Euler<float> attitude4_euler(0, 0, M_PI);
-	Quaternion<float> vehicle_attitude4(attitude4_euler); // 180 deg yaw
-
 	//obstacle at 10-30 deg world frame, distance 5 meters
 	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
 
@@ -757,7 +749,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_attitude)
 	}
 
 	//WHEN: we add distance sensor data while vehicle has zero yaw
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude1);
+	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
@@ -774,7 +766,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_attitude)
 
 
 	//WHEN: we add distance sensor data while vehicle yaw 90deg to the right
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude2);
+	cp.test_addObstacleSensorData(obstacle_msg, M_PI_2);
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
@@ -790,7 +782,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_attitude)
 	}
 
 	//WHEN: we add distance sensor data while vehicle yaw 45deg to the left
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude3);
+	cp.test_addObstacleSensorData(obstacle_msg, -M_PI_4);
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
@@ -806,7 +798,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_attitude)
 	}
 
 	//WHEN: we add distance sensor data while vehicle yaw 180deg
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude4);
+	cp.test_addObstacleSensorData(obstacle_msg, M_PI);
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
@@ -834,14 +826,6 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 	obstacle_msg.max_distance = 2000;
 	obstacle_msg.angle_offset = 0.f;
 
-	Quaternion<float> vehicle_attitude1(1, 0, 0, 0); //unit transform
-	Euler<float> attitude2_euler(0, 0, M_PI / 2.0);
-	Quaternion<float> vehicle_attitude2(attitude2_euler); //90 deg yaw
-	Euler<float> attitude3_euler(0, 0, -M_PI / 4.0);
-	Quaternion<float> vehicle_attitude3(attitude3_euler); // -45 deg yaw
-	Euler<float> attitude4_euler(0, 0, M_PI);
-	Quaternion<float> vehicle_attitude4(attitude4_euler); // 180 deg yaw
-
 	//obstacle at 10-30 deg body frame, distance 5 meters
 	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
 
@@ -858,7 +842,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 	}
 
 	//WHEN: we add obstacle data while vehicle has zero yaw
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude1);
+	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
@@ -874,7 +858,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 	}
 
 	//WHEN: we add obstacle data while vehicle yaw 90deg to the right
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude2);
+	cp.test_addObstacleSensorData(obstacle_msg, M_PI_2);
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
@@ -890,7 +874,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 	}
 
 	//WHEN: we add obstacle data while vehicle yaw 45deg to the left
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude3);
+	cp.test_addObstacleSensorData(obstacle_msg, -M_PI_4);
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
@@ -906,7 +890,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 	}
 
 	//WHEN: we add obstacle data while vehicle yaw 180deg
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude4);
+	cp.test_addObstacleSensorData(obstacle_msg, M_PI);
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
@@ -935,8 +919,6 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 	obstacle_msg.max_distance = 2000;
 	obstacle_msg.angle_offset = 0.f;
 
-	Quaternion<float> vehicle_attitude(1, 0, 0, 0); //unit transform
-
 	//obstacle at 0-30 deg world frame, distance 5 meters
 	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
 
@@ -945,7 +927,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 	}
 
 	//WHEN: we add distance sensor data
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude);
+	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
 
 	//THEN: the correct bins in the map should be filled
 	int distances_array_size = sizeof(cp.getObstacleMap().distances) / sizeof(cp.getObstacleMap().distances[0]);
@@ -964,7 +946,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 
 	//WHEN: we add distance sensor data with an angle offset
 	obstacle_msg.angle_offset = 30.f;
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude);
+	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
@@ -992,8 +974,7 @@ TEST_F(CollisionPreventionTest, adaptSetpointDirection_distinct_minimum)
 	obstacle_msg.max_distance = 2000;
 	obstacle_msg.angle_offset = 0.f;
 
-	Quaternion<float> vehicle_attitude(1, 0, 0, 0); //unit transform
-	float vehicle_yaw_angle_rad = Eulerf(vehicle_attitude).psi();
+	const float vehicle_yaw = 0.f;
 
 	//obstacle at 0-30 deg world frame, distance 5 meters
 	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
@@ -1006,7 +987,7 @@ TEST_F(CollisionPreventionTest, adaptSetpointDirection_distinct_minimum)
 
 	//define setpoint
 	Vector2f setpoint_dir(1, 0);
-	float sp_angle_body_frame = atan2f(setpoint_dir(1), setpoint_dir(0)) - vehicle_yaw_angle_rad;
+	float sp_angle_body_frame = atan2f(setpoint_dir(1), setpoint_dir(0)) - vehicle_yaw;
 	float sp_angle_with_offset_deg = wrap(math::degrees(sp_angle_body_frame) - cp.getObstacleMap().angle_offset,
 					      0.f, 360.f);
 	int sp_index = floor(sp_angle_with_offset_deg / cp.getObstacleMap().increment);
@@ -1018,8 +999,8 @@ TEST_F(CollisionPreventionTest, adaptSetpointDirection_distinct_minimum)
 	cp.paramsChanged();
 
 	//WHEN: we add distance sensor data
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude);
-	cp.test_adaptSetpointDirection(setpoint_dir, sp_index, vehicle_yaw_angle_rad);
+	cp.test_addObstacleSensorData(obstacle_msg, vehicle_yaw);
+	cp.test_adaptSetpointDirection(setpoint_dir, sp_index, vehicle_yaw);
 
 	//THEN: the setpoint direction should be modified correctly
 	EXPECT_EQ(sp_index, 2);
@@ -1039,8 +1020,7 @@ TEST_F(CollisionPreventionTest, adaptSetpointDirection_flat_minimum)
 	obstacle_msg.max_distance = 2000;
 	obstacle_msg.angle_offset = 0.f;
 
-	Quaternion<float> vehicle_attitude(1, 0, 0, 0); //unit transform
-	float vehicle_yaw_angle_rad = Eulerf(vehicle_attitude).psi();
+	const float vehicle_yaw = 0.f;
 
 	//obstacle at 0-30 deg world frame, distance 5 meters
 	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
@@ -1055,7 +1035,7 @@ TEST_F(CollisionPreventionTest, adaptSetpointDirection_flat_minimum)
 
 	//define setpoint
 	Vector2f setpoint_dir(1, 0);
-	float sp_angle_body_frame = atan2f(setpoint_dir(1), setpoint_dir(0)) - vehicle_yaw_angle_rad;
+	float sp_angle_body_frame = atan2f(setpoint_dir(1), setpoint_dir(0)) - vehicle_yaw;
 	float sp_angle_with_offset_deg = wrap(math::degrees(sp_angle_body_frame) - cp.getObstacleMap().angle_offset,
 					      0.f, 360.f);
 	int sp_index = floor(sp_angle_with_offset_deg / cp.getObstacleMap().increment);
@@ -1067,8 +1047,8 @@ TEST_F(CollisionPreventionTest, adaptSetpointDirection_flat_minimum)
 	cp.paramsChanged();
 
 	//WHEN: we add distance sensor data
-	cp.test_addObstacleSensorData(obstacle_msg, vehicle_attitude);
-	cp.test_adaptSetpointDirection(setpoint_dir, sp_index, vehicle_yaw_angle_rad);
+	cp.test_addObstacleSensorData(obstacle_msg, vehicle_yaw);
+	cp.test_adaptSetpointDirection(setpoint_dir, sp_index, vehicle_yaw);
 
 	//THEN: the setpoint direction should be modified correctly
 	EXPECT_EQ(sp_index, 2);

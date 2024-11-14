@@ -38,6 +38,8 @@ using namespace matrix;
 
 // to run: make tests TESTFILTER=CollisionPrevention
 hrt_abstime mocked_time = 0;
+const uint bin_size = CollisionPrevention::BIN_SIZE;
+const uint bin_count = CollisionPrevention::BIN_COUNT;
 
 class CollisionPreventionTest : public ::testing::Test
 {
@@ -619,7 +621,6 @@ TEST_F(CollisionPreventionTest, addOutOfRangeDistanceSensorData)
 {
 	// GIVEN: a vehicle attitude and a distance sensor message
 	TestCollisionPrevention cp;
-	cp.getObstacleMap().increment = 10.f;
 	Quaternion<float> vehicle_attitude(1, 0, 0, 0); //unit transform
 	distance_sensor_s distance_sensor {};
 	distance_sensor.min_distance = 0.2f;
@@ -644,11 +645,65 @@ TEST_F(CollisionPreventionTest, addOutOfRangeDistanceSensorData)
 	}
 }
 
+TEST_F(CollisionPreventionTest, addDistanceSensorDataNarrow)
+{
+	// GIVEN: a vehicle attitude and a distance sensor message
+	TestCollisionPrevention cp;
+	Quaternion<float> vehicle_attitude(1, 0, 0, 0); //unit transform
+	distance_sensor_s distance_sensor {};
+	distance_sensor.min_distance = 0.2f;
+	distance_sensor.max_distance = 20.f;
+	distance_sensor.current_distance = 5.f;
+	distance_sensor.orientation = distance_sensor_s::ROTATION_FORWARD_FACING;
+	distance_sensor.h_fov = math::radians(0.1 * bin_size);
+
+	uint32_t distances_array_size = sizeof(cp.getObstacleMap().distances) / sizeof(cp.getObstacleMap().distances[0]);
+
+	// WHEN the sensor has a very narrow field of view
+	cp.test_addDistanceSensorData(distance_sensor, vehicle_attitude);
+
+	//THEN: the correct bins in the map should be filled
+	for (uint32_t i = 0; i < distances_array_size; i++) {
+		if (i == 0) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
+
+		} else {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
+		}
+	}
+}
+TEST_F(CollisionPreventionTest, addDistanceSensorDataSlightlyLarger)
+{
+	// GIVEN: a vehicle attitude and a distance sensor message
+	TestCollisionPrevention cp;
+	Quaternion<float> vehicle_attitude(1, 0, 0, 0); //unit transform
+	distance_sensor_s distance_sensor {};
+	distance_sensor.min_distance = 0.2f;
+	distance_sensor.max_distance = 20.f;
+	distance_sensor.current_distance = 5.f;
+	distance_sensor.orientation = distance_sensor_s::ROTATION_FORWARD_FACING;
+	distance_sensor.h_fov = math::radians(1.1 * bin_size);
+
+	uint32_t distances_array_size = sizeof(cp.getObstacleMap().distances) / sizeof(cp.getObstacleMap().distances[0]);
+
+	// WHEN the sensor has a very narrow field of view
+	cp.test_addDistanceSensorData(distance_sensor, vehicle_attitude);
+
+	//THEN: the the bins corresponding to -5°, 0° and 5° should be filled
+	for (uint32_t i = 0; i < distances_array_size; i++) {
+		if (i == 71 || i <= 1) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
+
+		} else {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
+		}
+	}
+}
+
 TEST_F(CollisionPreventionTest, addDistanceSensorData)
 {
 	// GIVEN: a vehicle attitude and a distance sensor message
 	TestCollisionPrevention cp;
-	cp.getObstacleMap().increment = 10.f;
 	Quaternion<float> vehicle_attitude(1, 0, 0, 0); //unit transform
 	distance_sensor_s distance_sensor {};
 	distance_sensor.min_distance = 0.2f;
@@ -659,21 +714,24 @@ TEST_F(CollisionPreventionTest, addDistanceSensorData)
 	uint32_t distances_array_size = sizeof(cp.getObstacleMap().distances) / sizeof(cp.getObstacleMap().distances[0]);
 
 	for (uint32_t i = 0; i < distances_array_size; i++) {
-		EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+		EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 	}
 
 	//WHEN: we add distance sensor data to the right
 	distance_sensor.orientation = distance_sensor_s::ROTATION_RIGHT_FACING;
 	distance_sensor.h_fov = math::radians(19.99f);
 	cp.test_addDistanceSensorData(distance_sensor, vehicle_attitude);
+	uint fov = round(distance_sensor.h_fov * M_RAD_TO_DEG_F / 2);
+	uint start = (90 - fov) / bin_size;
+	uint end = (90 + fov) / bin_size;
 
 	//THEN: the correct bins in the map should be filled
 	for (uint32_t i = 0; i < distances_array_size; i++) {
-		if (i == 8 || i == 9) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+		if (i >= start && i <= end) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 	}
 
@@ -682,17 +740,20 @@ TEST_F(CollisionPreventionTest, addDistanceSensorData)
 	distance_sensor.h_fov = math::radians(50.f);
 	distance_sensor.current_distance = 8.f;
 	cp.test_addDistanceSensorData(distance_sensor, vehicle_attitude);
+	fov = round(distance_sensor.h_fov * M_RAD_TO_DEG_F / 2);
+	uint start2 = (270 - fov) / bin_size;
+	uint end2 = (270 + fov) / bin_size;
 
 	//THEN: the correct bins in the map should be filled
 	for (uint32_t i = 0; i < distances_array_size; i++) {
-		if (i == 8 || i == 9) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+		if (i >= start && i <= end) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
-		} else if (i >= 24 && i <= 29) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 800);
+		} else if (i >= start2 && i <= end2) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 800) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 	}
 
@@ -701,20 +762,23 @@ TEST_F(CollisionPreventionTest, addDistanceSensorData)
 	distance_sensor.h_fov = math::radians(10.1f);
 	distance_sensor.current_distance = 3.f;
 	cp.test_addDistanceSensorData(distance_sensor, vehicle_attitude);
+	fov = round(distance_sensor.h_fov * M_RAD_TO_DEG_F / 2);
+	uint start3 = (360 - fov) / bin_size;
+	uint end3 = (fov) / bin_size;
 
 	//THEN: the correct bins in the map should be filled
 	for (uint32_t i = 0; i < distances_array_size; i++) {
-		if (i == 8 || i == 9) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+		if (i >= start && i <= end) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500)  << i;
 
-		} else if (i >= 24 && i <= 29) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 800);
+		} else if (i >= start2 && i <= end2) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 800) << i;
 
-		} else if (i == 0) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 300);
+		} else if (i >= start3 || i <= end3) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 300) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 	}
 
@@ -725,7 +789,6 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_attitude)
 {
 	// GIVEN: a vehicle attitude and obstacle distance message
 	TestCollisionPrevention cp;
-	cp.getObstacleMap().increment = 10.f;
 	obstacle_distance_s obstacle_msg {};
 	obstacle_msg.frame = obstacle_msg.MAV_FRAME_GLOBAL; //north aligned
 	obstacle_msg.increment = 5.f;
@@ -736,9 +799,13 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_attitude)
 	//obstacle at 10-30 deg world frame, distance 5 meters
 	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
 
-	for (int i = 2; i < 6 ; i++) {
+	int start = 2;
+	int end = 6;
+
+	for (int i = start; i <= end ; i++) {
 		obstacle_msg.distances[i] = 500;
 	}
+
 
 
 	//THEN: at initialization the internal obstacle map should only contain UINT16_MAX
@@ -753,11 +820,11 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_attitude)
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i == 1 || i == 2) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+		if (i >= start && i <= end) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 
 		//reset array to UINT16_MAX
@@ -765,44 +832,50 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_attitude)
 	}
 
 
-	//WHEN: we add distance sensor data while vehicle yaw 90deg to the right
+	//WHEN: we add obstacle distance sensor data while vehicle yaw 90deg to the right
 	cp.test_addObstacleSensorData(obstacle_msg, M_PI_2);
 
 	//THEN: the correct bins in the map should be filled
+	int offset =  bin_count - 90 / bin_size;
+
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i == 28 || i == 29) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+		if (i >= offset + start && i <= offset + end) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 
 		//reset array to UINT16_MAX
 		cp.getObstacleMap().distances[i] = UINT16_MAX;
 	}
 
-	//WHEN: we add distance sensor data while vehicle yaw 45deg to the left
+	//WHEN: we add obstacle distance sensor data while vehicle yaw 45deg to the left
 	cp.test_addObstacleSensorData(obstacle_msg, -M_PI_4);
 
 	//THEN: the correct bins in the map should be filled
+	offset =  45 / bin_size;
+
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i == 6 || i == 7) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+		if (i >= offset + start && i <= offset + end) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 
 		//reset array to UINT16_MAX
 		cp.getObstacleMap().distances[i] = UINT16_MAX;
 	}
 
-	//WHEN: we add distance sensor data while vehicle yaw 180deg
+	//WHEN: we add obstacle distance sensor data while vehicle yaw 180deg
 	cp.test_addObstacleSensorData(obstacle_msg, M_PI);
 
 	//THEN: the correct bins in the map should be filled
+	offset =  180 / bin_size;
+
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i == 19 || i == 20) {
+		if (i >= offset + start && i <= offset + end) {
 			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
 
 		} else {
@@ -818,7 +891,6 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 {
 	// GIVEN: a vehicle attitude and obstacle distance message
 	TestCollisionPrevention cp;
-	cp.getObstacleMap().increment = 10.f;
 	obstacle_distance_s obstacle_msg {};
 	obstacle_msg.frame = obstacle_msg.MAV_FRAME_BODY_FRD; //north aligned
 	obstacle_msg.increment = 5.f;
@@ -828,8 +900,10 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 
 	//obstacle at 10-30 deg body frame, distance 5 meters
 	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
+	int start = 2;
+	int end = 6;
 
-	for (int i = 2; i < 6 ; i++) {
+	for (int i = start; i <= end ; i++) {
 		obstacle_msg.distances[i] = 500;
 	}
 
@@ -846,7 +920,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i == 1 || i == 2) {
+		if (i >= start && i <= end) {
 			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
 
 		} else {
@@ -862,7 +936,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i == 1 || i == 2) {
+		if (i >= start && i <= end) {
 			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
 
 		} else {
@@ -878,7 +952,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i == 1 || i == 2) {
+		if (i >= start && i <= end) {
 			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
 
 		} else {
@@ -894,7 +968,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i == 1 || i == 2) {
+		if (i >= start && i <= end) {
 			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
 
 		} else {
@@ -911,7 +985,6 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 {
 	// GIVEN: a vehicle attitude and obstacle distance message
 	TestCollisionPrevention cp;
-	cp.getObstacleMap().increment = 10.f;
 	obstacle_distance_s obstacle_msg {};
 	obstacle_msg.frame = obstacle_msg.MAV_FRAME_GLOBAL; //north aligned
 	obstacle_msg.increment = 6.f;
@@ -919,57 +992,77 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 	obstacle_msg.max_distance = 2000;
 	obstacle_msg.angle_offset = 0.f;
 
-	//obstacle at 0-30 deg world frame, distance 5 meters
+	//obstacle at 0-36 deg world frame, distance 5 meters
 	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
 
-	for (int i = 0; i < 5 ; i++) {
+	for (int i = 0; i <= 6 ; i++) { // 36° at 6° increment
 		obstacle_msg.distances[i] = 500;
 	}
 
 	//WHEN: we add distance sensor data
 	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
 
-	//THEN: the correct bins in the map should be filled
+	//THEN: the the bins from 0 to 35° in map should be filled, which correspond to the angles from -2.5° to 37.5°
 	int distances_array_size = sizeof(cp.getObstacleMap().distances) / sizeof(cp.getObstacleMap().distances[0]);
 
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i >= 0 && i <= 2) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+		if (i >= 0 && i <= 7) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 
 		//reset array to UINT16_MAX
 		cp.getObstacleMap().distances[i] = UINT16_MAX;
 	}
 
-	//WHEN: we add distance sensor data with an angle offset
+	//WHEN: we add the same obstacle distance sensor data with an angle offset of 30.5°
 	obstacle_msg.angle_offset = 30.f;
+	// This then means our obstacle is between 30.5° and 66.5°
+	// which means the bins from 30° to 65° in map should be filled, which correspond to the angles from 27.5° to 67.5°
 	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
 
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i >= 3 && i <= 5) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+		if (i >= 6 && i <= 13) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 
 		//reset array to UINT16_MAX
 		cp.getObstacleMap().distances[i] = UINT16_MAX;
 	}
+
+	//WHEN: we increase the offset to -30°
+	obstacle_msg.angle_offset = -30.f;
+	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
+	// This then means our obstacle is between 330° and 6.5°
+
+	for (int i = 0; i < distances_array_size; i++) {
+		if (i >= 66 || i <= 1) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
+
+		} else {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
+		}
+
+		//reset array to UINT16_MAX
+		cp.getObstacleMap().distances[i] = UINT16_MAX;
+	}
+
+	// TODO Add test for angle offsets which are less than an multiple of the increment.
 }
 
 TEST_F(CollisionPreventionTest, adaptSetpointDirection_distinct_minimum)
 {
 	// GIVEN: a vehicle attitude and obstacle distance message
 	TestCollisionPrevention cp;
-	cp.getObstacleMap().increment = 10.f;
 	obstacle_distance_s obstacle_msg {};
 	obstacle_msg.frame = obstacle_msg.MAV_FRAME_GLOBAL; //north aligned
-	obstacle_msg.increment = 10.f;
+	obstacle_msg.increment = 5.f;
 	obstacle_msg.min_distance = 20;
 	obstacle_msg.max_distance = 2000;
 	obstacle_msg.angle_offset = 0.f;
@@ -979,7 +1072,7 @@ TEST_F(CollisionPreventionTest, adaptSetpointDirection_distinct_minimum)
 	//obstacle at 0-30 deg world frame, distance 5 meters
 	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
 
-	for (int i = 0; i < 7 ; i++) {
+	for (int i = 0; i <= 6 ; i++) {
 		obstacle_msg.distances[i] = 500;
 	}
 
@@ -1004,18 +1097,17 @@ TEST_F(CollisionPreventionTest, adaptSetpointDirection_distinct_minimum)
 
 	//THEN: the setpoint direction should be modified correctly
 	EXPECT_EQ(sp_index, 2);
-	EXPECT_FLOAT_EQ(setpoint_dir(0), 0.93969262);
-	EXPECT_FLOAT_EQ(setpoint_dir(1), 0.34202012);
+	EXPECT_FLOAT_EQ(setpoint_dir(0), 0.98480773f);
+	EXPECT_FLOAT_EQ(setpoint_dir(1), 0.17364818f);
 }
 
 TEST_F(CollisionPreventionTest, adaptSetpointDirection_flat_minimum)
 {
 	// GIVEN: a vehicle attitude and obstacle distance message
 	TestCollisionPrevention cp;
-	cp.getObstacleMap().increment = 10.f;
 	obstacle_distance_s obstacle_msg {};
 	obstacle_msg.frame = obstacle_msg.MAV_FRAME_GLOBAL; //north aligned
-	obstacle_msg.increment = 10.f;
+	obstacle_msg.increment = 5.f;
 	obstacle_msg.min_distance = 20;
 	obstacle_msg.max_distance = 2000;
 	obstacle_msg.angle_offset = 0.f;
@@ -1052,8 +1144,8 @@ TEST_F(CollisionPreventionTest, adaptSetpointDirection_flat_minimum)
 
 	//THEN: the setpoint direction should be modified correctly
 	EXPECT_EQ(sp_index, 2);
-	EXPECT_FLOAT_EQ(setpoint_dir(0), 0.93969262f);
-	EXPECT_FLOAT_EQ(setpoint_dir(1), 0.34202012f);
+	EXPECT_FLOAT_EQ(setpoint_dir(0), 0.98480773f);
+	EXPECT_FLOAT_EQ(setpoint_dir(1), 0.17364818f);
 }
 
 TEST_F(CollisionPreventionTest, overlappingSensors)
@@ -1149,16 +1241,15 @@ TEST_F(CollisionPreventionTest, enterData)
 {
 	// GIVEN: a simple setup condition
 	TestCollisionPrevention cp;
-	cp.getObstacleMap().increment = 10.f;
 	Quaternion<float> vehicle_attitude(1, 0, 0, 0); //unit transform
 
 	//THEN: just after initialization all bins are at UINT16_MAX and any data should be accepted
-	EXPECT_TRUE(cp.test_enterData(8, 2.f, 1.5f)); //shorter range, reading in range
-	EXPECT_TRUE(cp.test_enterData(8, 2.f, 3.f)); //shorter range, reading out of range
-	EXPECT_TRUE(cp.test_enterData(8, 20.f, 1.5f)); //same range, reading in range
-	EXPECT_TRUE(cp.test_enterData(8, 20.f, 21.f)); //same range, reading out of range
-	EXPECT_TRUE(cp.test_enterData(8, 30.f, 1.5f)); //longer range, reading in range
-	EXPECT_TRUE(cp.test_enterData(8, 30.f, 31.f)); //longer range, reading out of range
+	EXPECT_TRUE(cp.test_enterData(16, 2.f, 1.5f)); //shorter range, reading in range
+	EXPECT_TRUE(cp.test_enterData(16, 2.f, 3.f)); //shorter range, reading out of range
+	EXPECT_TRUE(cp.test_enterData(16, 20.f, 1.5f)); //same range, reading in range
+	EXPECT_TRUE(cp.test_enterData(16, 20.f, 21.f)); //same range, reading out of range
+	EXPECT_TRUE(cp.test_enterData(16, 30.f, 1.5f)); //longer range, reading in range
+	EXPECT_TRUE(cp.test_enterData(16, 30.f, 31.f)); //longer range, reading out of range
 
 	//WHEN: we add distance sensor data to the right with a valid reading
 	distance_sensor_s distance_sensor {};
@@ -1170,36 +1261,38 @@ TEST_F(CollisionPreventionTest, enterData)
 	cp.test_addDistanceSensorData(distance_sensor, vehicle_attitude);
 
 	//THEN: the internal map should contain the distance sensor readings
-	EXPECT_EQ(500, cp.getObstacleMap().distances[8]);
-	EXPECT_EQ(500, cp.getObstacleMap().distances[9]);
+	for (int i = 16; i < 20; i++) {
+		EXPECT_EQ(500, cp.getObstacleMap().distances[i]) << i;
+	}
 
 	//THEN: bins 8 & 9 contain valid readings
 	// a valid reading should only be accepted from sensors with shorter or equal range
 	// a out of range reading should only be accepted from sensors with the same range
 
-	EXPECT_TRUE(cp.test_enterData(8, 2.f, 1.5f)); //shorter range, reading in range
-	EXPECT_FALSE(cp.test_enterData(8, 2.f, 3.f)); //shorter range, reading out of range
-	EXPECT_TRUE(cp.test_enterData(8, 20.f, 1.5f)); //same range, reading in range
-	EXPECT_TRUE(cp.test_enterData(8, 20.f, 21.f)); //same range, reading out of range
-	EXPECT_FALSE(cp.test_enterData(8, 30.f, 1.5f)); //longer range, reading in range
-	EXPECT_FALSE(cp.test_enterData(8, 30.f, 31.f)); //longer range, reading out of range
+	EXPECT_TRUE(cp.test_enterData(16, 2.f, 1.5f)); //shorter range, reading in range
+	EXPECT_FALSE(cp.test_enterData(16, 2.f, 3.f)); //shorter range, reading out of range
+	EXPECT_TRUE(cp.test_enterData(16, 20.f, 1.5f)); //same range, reading in range
+	EXPECT_TRUE(cp.test_enterData(16, 20.f, 21.f)); //same range, reading out of range
+	EXPECT_FALSE(cp.test_enterData(16, 30.f, 1.5f)); //longer range, reading in range
+	EXPECT_FALSE(cp.test_enterData(16, 30.f, 31.f)); //longer range, reading out of range
 
 	//WHEN: we add distance sensor data to the right with an out of range reading
 	distance_sensor.current_distance = 21.f;
 	cp.test_addDistanceSensorData(distance_sensor, vehicle_attitude);
 
 	//THEN: the internal map should contain the distance sensor readings
-	EXPECT_EQ(2000, cp.getObstacleMap().distances[8]);
-	EXPECT_EQ(2000, cp.getObstacleMap().distances[9]);
+	for (int i = 16; i < 20; i++) {
+		EXPECT_EQ(2000, cp.getObstacleMap().distances[i]) << i;
+	}
 
 	//THEN: bins 8 & 9 contain readings out of range
 	// a reading in range will be accepted in any case
 	// out of range readings will only be accepted from sensors with bigger or equal range
 
-	EXPECT_TRUE(cp.test_enterData(8, 2.f, 1.5f)); //shorter range, reading in range
-	EXPECT_FALSE(cp.test_enterData(8, 2.f, 3.f)); //shorter range, reading out of range
-	EXPECT_TRUE(cp.test_enterData(8, 20.f, 1.5f)); //same range, reading in range
-	EXPECT_TRUE(cp.test_enterData(8, 20.f, 21.f)); //same range, reading out of range
-	EXPECT_TRUE(cp.test_enterData(8, 30.f, 1.5f)); //longer range, reading in range
-	EXPECT_TRUE(cp.test_enterData(8, 30.f, 31.f)); //longer range, reading out of range
+	EXPECT_TRUE(cp.test_enterData(16, 2.f, 1.5f)); //shorter range, reading in range
+	EXPECT_FALSE(cp.test_enterData(16, 2.f, 3.f)); //shorter range, reading out of range
+	EXPECT_TRUE(cp.test_enterData(16, 20.f, 1.5f)); //same range, reading in range
+	EXPECT_TRUE(cp.test_enterData(16, 20.f, 21.f)); //same range, reading out of range
+	EXPECT_TRUE(cp.test_enterData(16, 30.f, 1.5f)); //longer range, reading in range
+	EXPECT_TRUE(cp.test_enterData(16, 30.f, 31.f)); //longer range, reading out of range
 }

@@ -248,8 +248,7 @@ TEST_F(CollisionPreventionTest, testBehaviorOnWithDistanceMessage)
 
 	EXPECT_FLOAT_EQ(cp.getObstacleMap().min_distance, 100);
 	EXPECT_FLOAT_EQ(cp.getObstacleMap().max_distance, 10000);
-	printf("modified_setpoint1: %f, %f\n", (double)modified_setpoint1(0), (double)modified_setpoint1(1));
-	printf("modified_setpoint2: %f, %f\n", (double)modified_setpoint2(0), (double)modified_setpoint2(1));
+
 	EXPECT_GT(0.f, modified_setpoint1(0)) << modified_setpoint1(0);
 	EXPECT_EQ(0.f, fabsf(modified_setpoint1(1))) << modified_setpoint1(1);
 	EXPECT_GT(0.f, modified_setpoint2(0))  << original_setpoint2(0);
@@ -887,6 +886,80 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_attitude)
 	}
 }
 
+TEST_F(CollisionPreventionTest, addObstacleSensorData_offset_bodyframe)
+{
+	// GIVEN: a vehicle attitude and obstacle distance message
+	TestCollisionPrevention cp;
+	obstacle_distance_s obstacle_msg {};
+	obstacle_msg.frame = obstacle_msg.MAV_FRAME_BODY_FRD; // Body Frame
+	obstacle_msg.increment = 6.f;
+	obstacle_msg.min_distance = 20;
+	obstacle_msg.max_distance = 2000;
+	obstacle_msg.angle_offset = 0.f;
+
+	//obstacle at 363°-39° deg world frame, distance 5 meters
+	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
+
+	for (int i = 0; i <= 6 ; i++) { // 36° at 6° increment
+		obstacle_msg.distances[i] = 500;
+	}
+
+	//WHEN: we add distance sensor data
+	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
+
+	//THEN: the the bins from 0 to 40 in map should be filled, which correspond to the angles from -2.5° to 42.5°
+	int distances_array_size = sizeof(cp.getObstacleMap().distances) / sizeof(cp.getObstacleMap().distances[0]);
+
+	for (int i = 0; i < distances_array_size; i++) {
+		if (i >= 0 && i <= 8) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
+
+		} else {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
+		}
+
+		//reset array to UINT16_MAX
+		cp.getObstacleMap().distances[i] = UINT16_MAX;
+	}
+
+	//WHEN: we add the same obstacle distance sensor data with an angle offset of 30.5°
+	obstacle_msg.angle_offset = 30.5f;
+	// This then means our obstacle is between 27.5° and 69.5°
+	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
+
+	//THEN: the bins from 30° to 70° in map should be filled, which correspond to the angles from 27.5° to 72.5°
+	for (int i = 0; i < distances_array_size; i++) {
+		if (i >= 6 && i <= 14) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
+
+		} else {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
+		}
+
+		//reset array to UINT16_MAX
+		cp.getObstacleMap().distances[i] = UINT16_MAX;
+	}
+
+	//WHEN: we increase the offset to -30.5°
+	obstacle_msg.angle_offset = -30.5f;
+	// This then means our obstacle is between 326.5° and 8.5°
+	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
+
+	//THEN: the bins from 325° to 10° in map should be filled, which correspond to the angles from 322.5° to 12.5°
+
+	for (int i = 0; i < distances_array_size; i++) {
+		if (i >= 65 || i <= 2) {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
+
+		} else {
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
+		}
+
+		//reset array to UINT16_MAX
+		cp.getObstacleMap().distances[i] = UINT16_MAX;
+	}
+}
+
 TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 {
 	// GIVEN: a vehicle attitude and obstacle distance message
@@ -919,12 +992,13 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
 
 	//THEN: the correct bins in the map should be filled
+
 	for (int i = 0; i < distances_array_size; i++) {
 		if (i >= start && i <= end) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 
 		//reset array to UINT16_MAX
@@ -937,10 +1011,10 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
 		if (i >= start && i <= end) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 
 		//reset array to UINT16_MAX
@@ -953,10 +1027,10 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
 		if (i >= start && i <= end) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 
 		//reset array to UINT16_MAX
@@ -969,15 +1043,16 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_bodyframe)
 	//THEN: the correct bins in the map should be filled
 	for (int i = 0; i < distances_array_size; i++) {
 		if (i >= start && i <= end) {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
-			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX);
+			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], UINT16_MAX) << i;
 		}
 
 		//reset array to UINT16_MAX
 		cp.getObstacleMap().distances[i] = UINT16_MAX;
 	}
+
 }
 
 
@@ -992,7 +1067,7 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 	obstacle_msg.max_distance = 2000;
 	obstacle_msg.angle_offset = 0.f;
 
-	//obstacle at 0-36 deg world frame, distance 5 meters
+	//obstacle at 363°-39° deg world frame, distance 5 meters
 	memset(&obstacle_msg.distances[0], UINT16_MAX, sizeof(obstacle_msg.distances));
 
 	for (int i = 0; i <= 6 ; i++) { // 36° at 6° increment
@@ -1002,11 +1077,11 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 	//WHEN: we add distance sensor data
 	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
 
-	//THEN: the the bins from 0 to 35° in map should be filled, which correspond to the angles from -2.5° to 37.5°
+	//THEN: the the bins from 0 to 40 in map should be filled, which correspond to the angles from -2.5° to 42.5°
 	int distances_array_size = sizeof(cp.getObstacleMap().distances) / sizeof(cp.getObstacleMap().distances[0]);
 
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i >= 0 && i <= 7) {
+		if (i >= 0 && i <= 8) {
 			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
@@ -1018,14 +1093,13 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 	}
 
 	//WHEN: we add the same obstacle distance sensor data with an angle offset of 30.5°
-	obstacle_msg.angle_offset = 30.f;
-	// This then means our obstacle is between 30.5° and 66.5°
-	// which means the bins from 30° to 65° in map should be filled, which correspond to the angles from 27.5° to 67.5°
+	obstacle_msg.angle_offset = 30.5f;
+	// This then means our obstacle is between 27.5° and 69.5°
 	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
 
-	//THEN: the correct bins in the map should be filled
+	//THEN: the bins from 30° to 70° in map should be filled, which correspond to the angles from 27.5° to 72.5°
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i >= 6 && i <= 13) {
+		if (i >= 6 && i <= 14) {
 			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
@@ -1036,13 +1110,15 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 		cp.getObstacleMap().distances[i] = UINT16_MAX;
 	}
 
-	//WHEN: we increase the offset to -30°
-	obstacle_msg.angle_offset = -30.f;
+	//WHEN: we increase the offset to -30.5°
+	obstacle_msg.angle_offset = -30.5f;
+	// This then means our obstacle is between 326.5° and 8.5°
 	cp.test_addObstacleSensorData(obstacle_msg, 0.f);
-	// This then means our obstacle is between 330° and 6.5°
+
+	//THEN: the bins from 325° to 10° in map should be filled, which correspond to the angles from 322.5° to 12.5°
 
 	for (int i = 0; i < distances_array_size; i++) {
-		if (i >= 66 || i <= 1) {
+		if (i >= 65 || i <= 2) {
 			EXPECT_FLOAT_EQ(cp.getObstacleMap().distances[i], 500) << i;
 
 		} else {
@@ -1052,8 +1128,6 @@ TEST_F(CollisionPreventionTest, addObstacleSensorData_resolution_offset)
 		//reset array to UINT16_MAX
 		cp.getObstacleMap().distances[i] = UINT16_MAX;
 	}
-
-	// TODO Add test for angle offsets which are less than an multiple of the increment.
 }
 
 TEST_F(CollisionPreventionTest, adaptSetpointDirection_distinct_minimum)

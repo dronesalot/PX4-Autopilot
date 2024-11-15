@@ -169,6 +169,7 @@ private:
 
 	void project(double lat, double lon, float &x, float &y) const;
 	void rotationToSurfaceFrame();
+	void convert(double &latitude, double &longitude, double &height);
 
 	struct EcefConst {
 		const double a = 6378137.0;                // Semi-major axis (equatorial radius) in meters
@@ -189,6 +190,8 @@ private:
 	double _lon;
 	double _alt;
 	matrix::Dcmf _C_ES;
+	matrix::Dcmf _C_EB;
+	matrix::Vector3f _v_S;
 
 	const double Omega_e = 7.2921159e-5;      // Earth's angular velocity (rad/s)
 

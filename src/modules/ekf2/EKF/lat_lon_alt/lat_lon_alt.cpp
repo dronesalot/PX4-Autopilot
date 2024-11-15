@@ -41,10 +41,11 @@ Vector3f LatLonAlt::computeAngularRateNavFrame(const Vector3f &v_ned) const
 	double r_n;
 	double r_e;
 	computeRadiiOfCurvature(_latitude_rad, r_n, r_e);
+	const double alt = static_cast<double>(_altitude);
 	return Vector3f(
-		       v_ned(1) / (static_cast<float>(r_e) + _altitude),
-		       -v_ned(0) / (static_cast<float>(r_n) + _altitude),
-		       -v_ned(1) * tanf(_latitude_rad) / (static_cast<float>(r_e) + _altitude));
+		       static_cast<float>(static_cast<double>(v_ned(1)) / (r_e + alt)),
+		       static_cast<float>(static_cast<double>(-v_ned(0)) / (r_n + alt)),
+		       static_cast<float>(static_cast<double>(-v_ned(1)) * std::tan(_latitude_rad) / (r_e + alt)));
 }
 
 Vector2d LatLonAlt::deltaLatLonToDeltaXY(const double latitude, const float altitude)
